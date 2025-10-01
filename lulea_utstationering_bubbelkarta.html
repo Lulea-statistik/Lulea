@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Luleå – utstationeringar (bubbelkarta)</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    :root {
+      --bg: #0b1220; --card: #111b2e; --text: #e8eefc; --muted: #a9b5d1;
+      --accent: #7aa2ff; --accent2: #8af5d7; --border: #233152;
+    }
+    *{box-sizing:border-box}
+    body { margin:0; background: radial-gradient(1200px 800px at 15% -10%, #1a2a4a, #0b1220); color:var(--text);
+           font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+    h1 { margin:0; font-size: clamp(18px,2vw,22px); }
+    .pill { background:#0e1930; border:1px solid var(--border); padding:6px 10px; border-radius:999px; font-size:12px; color:var(--muted); }
+    .wrap { display:grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 60px); }
+    aside { border-right:1px solid var(--border); background:linear-gradient(180deg, rgba(17,27,46,.9), rgba(17,27,46,.6)); padding:12px; overflow:auto; }
+    #map { height: calc(100vh - 60px); width: 100%; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px; margin:10px 0; }
+    .card h2 { margin:0 0 8px; font-size:16px; }
+    .small { font-size:12px; color:var(--muted); }
+    .row { display:flex; gap:8px; align-items:center; }
+    button { appearance:none; background:#172540; color:var(--text); border:1px solid var(--border);
+             padding:8px 12px; border-radius:10px; cursor:pointer; }
+    button.accent{ background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#071327; border-color:transparent;}
+    .progress{width:100%; height:8px; border-radius:999px; background:#0e1930; border:1px solid var(--border); overflow:hidden;}
+    .progress>div{height:100%; width:0%; background:linear-gradient(90deg, var(--accent), var(--accent2));}
+    table { width:100%; border-collapse: collapse; font-size:12px; }
+    th, td { border-bottom:1px solid #1b2746; padding:6px 4px; vertical-align: top; }
+    th { text-align:left; color:var(--muted); font-weight:600; }
+    .legend { display:flex; align-items:center; gap:10px; }
+    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background: #4aa3ff; opacity:0.6; border:1px solid rgba(0,0,0,.25); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="pill">Luleå</div>
+  <h1>Utstationeringar – bubbelkarta skalenlig efter antal</h1>
+</header>
+<div class="wrap">
+  <aside>
+    <div class="card">
+      <h2>Data (summerat per adress)</h2>
+      <div class="small">Cirklar skaleras efter <b>Totalt antal</b>. Geokodning sker mot Nominatim (1 req/s).</div>
+      <div class="progress" style="margin-top:8px;"><div id="bar"></div></div>
+      <div id="counts" class="small" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Teckenförklaring</h2>
+      <div class="legend small">
+        <span class="dot" style="transform:scale(0.8)"></span> Få arbetstagare
+        <span class="dot" style="transform:scale(1.3)"></span> Fler
+        <span class="dot" style="transform:scale(1.8)"></span> Många
+      </div>
+      <div class="small" style="margin-top:6px;">Radie beräknas linjärt mellan min och max.</div>
+    </div>
+
+    <div class="card">
+      <h2>Poster</h2>
+      <div id="tableWrap" class="small">Laddar tabell…</div>
+    </div>
+  </aside>
+  <main id="map"></main>
+</div>
+
+<script>
+const items = [
+  { address:"Svartöbrinken 17 97437 Luleå", total:39, employers:"AFRY Finland Oy; Tornion Harjateräs Oy; Workpart Supply OÜ" },
+  { address:"Svartövägen 20 97437 Luleå", total:25, employers:"4Surface, UAB; ERCON Services SIA; OSCHATZ Services & Solutions s.r.o.; OSMIUM LT" },
+  { address:"Kallaxvägen 256 97595 Luleå", total:20, employers:"SBS MANAGEMENT SP. Z O.O." },
+  { address:"Småbåtsgatan 1 97235 Luleå", total:19, employers:"SBS MANAGEMENT SP. Z O.O." },
+  { address:"Midgårdsvägen 3 97334 Luleå", total:16, employers:"Holsti Forest Oy" },
+  { address:"Västra Varvsgatan 11 97236 Luleå", total:12, employers:"Sweco Polska sp. z o.o." },
+  { address:"Skeppsbrogatan 48A 97231 Luleå", total:8, employers:"UAB Cebeco grupe" },
+  { address:"Teknikvägen 1 97347 Luleå", total:6, employers:"PHS-Tech GmbH" },
+  { address:"Strömörvägen 2 97437 Luleå", total:6, employers:"UAB Izolitas" },
+  { address:"Abborrgränd 1 97452 Luleå", total:5, employers:'UAB "ARSATEKA"; UAB IGMABALT' },
+  { address:"Handelsvägen 19 97345 Luleå", total:5, employers:'SIA "VSA Service"' },
+  { address:"Depåvägen 3B 97347 Luleå", total:5, employers:"Reston Industries" },
+  { address:"Avabäcksvägen 217 97598 Luleå", total:5, employers:"M. ja H. Rintamäki Oy" },
+  { address:"Flatenvägen 8 97597 Luleå", total:4, employers:"Olesco Projects UAB" },
+  { address:"Storgatan 30A 97232 Luleå", total:3, employers:"KGS Keller Geräte & Service GmbH; Keller Polska Sp. z o.o." },
+  { address:"Uddebovägen 1 97437 Luleå", total:3, employers:"Crane Norway Midt-Norge AS" },
+  { address:"Fabriksvägen 8 97254 Luleå", total:2, employers:"Global Scaffolders UAB" },
+  { address:"Sunderbyvägen 109 95442 Södra Sunderbyn", total:2, employers:"Tornion Harjateras Oy" },
+  { address:"Datavägen 14 97754 Luleå", total:2, employers:"Anord Mardix; Flextronics Romania SRL" },
+  { address:"Besiktningsvägen 10 97345 Luleå", total:2, employers:"Main Partners Sp. z o.o." },
+  { address:"Lävägen 142 97634 Luleå", total:1, employers:"HKR MANPOWER SP. Z O.O." },
+  { address:"Abborrgränd 10 97452 Luleå", total:1, employers:'UAB "ARSATEKA"' },
+  { address:"Sjukhusvägen 10 95442 Södra Sunderbyn", total:1, employers:"Siemens Healtineers AG" },
+  { address:"Storgatan 7D 97238 Luleå", total:1, employers:"Keller Polska Sp. z o.o." },
+  { address:"Norrsågsvägen 47F 97254 Luleå", total:1, employers:"Kiwa Polska Sp. z o.o." }
+];
+
+// Build table
+function renderTable() {
+  let html = '<table><thead><tr><th>Adress</th><th>Totalt</th><th>Arbetsgivare</th></tr></thead><tbody>';
+  for (const it of items) {
+    html += `<tr><td>${it.address}</td><td>${it.total}</td><td>${it.employers}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('tableWrap').innerHTML = html;
+}
+renderTable();
+
+// Map
+const map = L.map('map').setView([65.5848, 22.1567], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+const bar = document.getElementById('bar');
+const counts = document.getElementById('counts');
+
+// Geocode with throttling 1/sec
+async function geocodeAll() {
+  const withCoords = [];
+  let done = 0;
+  const min = Math.min(...items.map(i=>i.total));
+  const max = Math.max(...items.map(i=>i.total));
+  for (const it of items) {
+    const q = encodeURIComponent(`${it.address}, Sweden`);
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&countrycodes=se&limit=1`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'sv' } });
+      const arr = await res.json();
+      if (Array.isArray(arr) && arr.length > 0) {
+        const { lat, lon, display_name } = arr[0];
+        const radius = scaleRadius(it.total, min, max); // in pixels
+        withCoords.push({ ...it, lat: +lat, lon: +lon, display_name, radius });
+      } else {
+        withCoords.push({ ...it, lat: null, lon: null, display_name: null, radius: scaleRadius(it.total, min, max) });
+      }
+    } catch(e) {
+      withCoords.push({ ...it, lat: null, lon: null, display_name: null, radius: scaleRadius(it.total, min, max) });
+    }
+    done++;
+    bar.style.width = Math.round((done/items.length)*100) + '%';
+    counts.textContent = `Geokodade ${done}/${items.length} adresser`;
+    await new Promise(r => setTimeout(r, 1100));
+  }
+  return withCoords;
+}
+
+function scaleRadius(value, min, max) {
+  if (max === min) return 12;
+  // Scale linearly into [8, 28] px
+  const r = 8 + (value - min) * (28 - 8) / (max - min);
+  return r;
+}
+
+function draw(withCoords) {
+  const valid = withCoords.filter(i => typeof i.lat === 'number' && typeof i.lon === 'number');
+  const layer = L.layerGroup();
+  for (const it of valid) {
+    const circle = L.circleMarker([it.lat, it.lon], {
+      radius: it.radius,
+      weight: 1,
+      opacity: 0.9,
+      fillOpacity: 0.6
+    }).addTo(layer);
+    circle.bindPopup(`
+      <div style="font-weight:700; margin-bottom:2px;">${it.address}</div>
+      <div><b>Totalt:</b> ${it.total}</div>
+      <div style="margin-top:4px; font-size:12px; color:#a9b5d1;"><b>Arbetsgivare:</b> ${it.employers}</div>
+      ${it.display_name ? `<div style="margin-top:4px; font-size:11px; color:#7aa2ff;">${it.display_name}</div>` : ''}
+    `);
+  }
+  layer.addTo(map);
+  if (valid.length) {
+    const bounds = L.latLngBounds(valid.map(it => [it.lat, it.lon]));
+    map.fitBounds(bounds.pad(0.2));
+  }
+}
+
+(async () => {
+  const withCoords = await geocodeAll();
+  draw(withCoords);
+})();
+</script>
+</body>
+</html>
