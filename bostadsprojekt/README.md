@@ -4,14 +4,15 @@ Versionshanterade snapshots av privata/icke-kommunala källor för kommande, pla
 
 ## Struktur
 
-- `snapshots/YYYY-MM-DD_aktiva.csv` – verifierade aktiva/planerade projekt
-- `snapshots/YYYY-MM-DD_bevakning.csv` – bevakningsfall med osäker, gammal, pausad eller motsägelsefull status
+- `history.csv` – sammanhängande historik för alla snapshots. Kolumnen `Statusklass` skiljer mellan `Aktiv/verifierad` och `Bevakning`.
+- `snapshots/YYYY-MM-DD_aktiva.csv` – verifierade aktiva/planerade projekt per körning.
+- `snapshots/YYYY-MM-DD_bevakning.csv` – bevakningsfall med osäker, gammal, pausad eller motsägelsefull status.
 
-## Senaste snapshot
+## Tillgängliga snapshots
 
-2026-10-02
+- 2026-09-25: 8 aktiva/verifierade + 5 bevakningsfall.
+- 2026-10-02: 8 aktiva/verifierade + 5 bevakningsfall.
 
-- Verifierade aktiva/planerade projekt: 8
-- Bevakningsfall: 5
+`history.csv` innehåller båda datumen och kan användas direkt som historikkälla i exempelvis Power BI.
 
 Kommunala källor och kommunala bolag används inte som källa i denna sammanställning.
